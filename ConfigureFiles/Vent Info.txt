@@ -1,0 +1,7 @@
+Vent	Baud Rate	Data Length	Start Bits	Stop Bits	Parity	Data Format	Handshake	Other
+Servo-I	9600	7 or 8 bits	0	1 or 2 bits	Even	ASCII or binary (binary requires 8 bits)	XON/XOFF	Both data length (7 or 8 bits) and stop bits (1 or 2 bits) are auto-detected
+Bilaga 24 SCI	38400	8 bits	0	1	Even	Binary	None	
+Datex-Ohmeda	19200	7 data bits plus others	1	1	Odd	unknown	unknown	Start bit + 7 data bits + parity bit + stop bit
+Evita Infinity V500	1200, 2400, 4800, 9600, 19200, 38400	8 bits	0	1,2	Even, Odd, None	unknown	unknown	
+Hamilton 1	384000	8 bits	0	1	None	unknown	None	Parity - None, data integrity is verified by checksum
+Medibus IFU	1200, 2400, 4800, 9600, 19200, 38400	8 bits	0	1,2	Even, Odd, None	unknown	unknown	
