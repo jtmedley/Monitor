@@ -18,4 +18,5 @@ Dr. David Lee
 dtlee@gwu.edu
 
 
-Miscellaneous Notes
+Miscellaneous Notes:
+
