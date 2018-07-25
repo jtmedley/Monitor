@@ -5,29 +5,24 @@
  */
 
 /* 
- * File:   main.cpp
- * Author: Jonathan Medley
+ * File:   VentH.h
+ * Author: Medley
  *
- * Created on July 3, 2018, 3:46 PM
+ * Created on July 25, 2018, 1:21 PM
  */
 
-//#include <PortableIncludes.h>
-  
+#ifndef VENTH_H
+#define VENTH_H
+
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <Test.h>
+#include <termios.h>
+#include <iostream>
+#include <string.h>
 
-/*
- * 
- */
-int main() {
-    
-    // Testing Protocol
-    int TestSuccess;
-    TestSuccess = Test();
-    
-    
-    return 0;
-}
+struct termios VentH(struct termios options,char stream,char Vent);
+
+
+#endif /* VENTH_H */
