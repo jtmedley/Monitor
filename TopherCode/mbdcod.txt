@@ -1,0 +1,374 @@
+#include "mbed.h"
+#include "mbed_genie.h"
+//#define DEBUG 1
+Mbed4dGenie::Mbed4dGenie(PinName TxPin,PinName RxPin, PinName resetpin) : _screen(TxPin,RxPin) , _reset(resetpin)
+{
+    //reset the 4d screen
+    _reset = 0;
+    _screen.baud(9600);
+    _genieUserHandler = NULL;
+    RxStateTimeoutErrors = 0;
+}
+Mbed4dGenie::Mbed4dGenie(PinName TxPin,PinName RxPin, PinName resetpin,uint32_t baud) : _screen(TxPin,RxPin) , _reset(resetpin)
+{
+     //reset the 4d screen
+    _reset = 0;
+    _screen.baud(baud);
+    _genieUserHandler = NULL;
+    RxStateTimeoutErrors = 0;
+}
+void Mbed4dGenie::Start()
+{
+    _reset = 1;
+    wait(3.0);  //4D datasheet says that the screen can take up to 3000 ms before
+                //becomming responsive to serial commands.        
+    _waitTimer.start();
+    _receptionTimer.start();
+    Reset();
+    _genieFlushEventQueue();
+    _screen.attach(this,&Mbed4dGenie::RxIrqHandler,Serial::RxIrq);
+}
+//topheradded
+void Mbed4dGenie::Restart()
+{
+    _reset = 1;
+    wait(3.0);  //4D datasheet says that the screen can take up to 3000 ms before
+                //becomming responsive to serial commands.        
+    _waitTimer.stop();
+    _receptionTimer.stop();
+    _waitTimer.start();
+    _receptionTimer.start();
+    Reset();
+    _genieFlushEventQueue();
+   // _screen.attach(this,&Mbed4dGenie::RxIrqHandler,Serial::RxIrq);
+}//topher end
+
+////////////////////// genieGetEventData ////////////////////////
+//
+// Returns the LSB and MSB of the event's data combined into
+// a single uint16
+//
+// The data is transmitted from the display in big-endian format 
+// and stored the same so the user can't just access it as an int 
+// directly from the structure. 
+//
+uint16_t Mbed4dGenie::genieGetEventData (genieFrame * e) {
+        return  (e->reportObject.data_msb << 8) + e->reportObject.data_lsb;
+}
+
+void Mbed4dGenie::RxIrqHandler(void)
+{
+    char c;
+    //Loop to read all byte present in UART FIFO
+    do
+    {
+        c = _screen.getc();
+        /*
+            check if we are in reception mode and if we timeout
+        */
+        if(_receptionTimer.read_ms() >= RxMaxTimeout && state == CommInProgress)
+        {
+            /*
+                if we get here, it means something bad has happened and 
+                we need to reet communication status
+            */
+            #ifdef DEBUG
+            printf("Rxtimeout");
+            #endif
+            Reset();
+        }
+        ManageReceiveData(c);
+    }
+    while(_screen.readable());
+}
+
+void Mbed4dGenie::ManageReceiveData(char data)
+{
+    switch(state)
+    {
+        case CommIdle: 
+        
+            if(data == GENIE_ACK || data == GENIE_NAK)
+            {
+                LastResponse = data;
+            }   
+            else if(data == GENIE_REPORT_OBJ || data == GENIE_REPORT_EVENT)
+            {
+                //re-initialise the reception timer
+                _receptionTimer.reset();
+                RxMaxTimeout = _receptionTimer.read_ms() + RESYNC_PERIOD;
+                checksum = data;
+                rx_data[rxframe_count++] = data;
+                state = CommInProgress;              
+            }                     
+            break;
+        
+        
+        case CommInProgress: 
+            checksum = checksum ^ data;
+            rx_data[rxframe_count++] = data;
+            
+            if(rxframe_count >= GENIE_FRAME_SIZE)
+            {
+                if (checksum == 0) {
+                        _genieEnqueueEvent(rx_data); 
+                        if(_genieUserHandler != NULL)
+                        {
+                            (_genieUserHandler)();
+                        }
+                    } 
+                state = CommIdle;
+                rxframe_count = 0;
+                LastResponse = NO_RESPONSE;
+            }        
+            break;
+        default:
+            state = CommIdle;
+            rxframe_count = 0;
+            LastResponse = NO_RESPONSE;
+            break;
+    }
+}
+
+
+///////////////////////// genieWriteObject //////////////////////
+//
+// Write data to an object on the display
+//
+int8_t Mbed4dGenie::genieWriteObject (uint16_t object, uint16_t index, uint16_t data)
+{
+    uint16_t msb, lsb ;
+    uint8_t checksum ;
+    
+    //wait for interface to be ready before sending stuff
+    if(WaitForIdle())
+        return ERROR_RESYNC;
+
+    lsb = data&0xFF;
+    msb = (data>>8) & 0xFF;
+    
+    _screen.putc(GENIE_WRITE_OBJ) ; 
+    checksum  = GENIE_WRITE_OBJ ;
+    _screen.putc(object) ;          
+    checksum ^= object ;
+    _screen.putc(index) ;           
+    checksum ^= index ;
+    _screen.putc(msb) ;             
+    checksum ^= msb;
+    _screen.putc(lsb) ;             
+    checksum ^= lsb;
+    _screen.putc(checksum) ;
+    
+     return Mbed4dGenie::WaitForAnswer();    
+}
+int8_t Mbed4dGenie::genieWriteStr (uint16_t index, char *string)
+{
+        char *p ;
+        unsigned int checksum ;
+        int len = strlen (string) ;
+
+
+        if (len > 255)
+        return -1 ;
+
+
+        //wait for interface to be ready before sending stuff
+        if(WaitForIdle())
+            return ERROR_RESYNC;
+
+
+        _screen.putc(GENIE_WRITE_STR) ;               checksum  = GENIE_WRITE_STR ;
+        _screen.putc(index) ;              checksum ^= index ;
+        _screen.putc((unsigned char)len) ; checksum ^= len ;
+        for (p = string ; *p ; ++p)        {
+                _screen.putc (*p) ;
+                checksum ^= *p ;
+        }
+        _screen.putc(checksum) ;
+
+        return  Mbed4dGenie::WaitForAnswer();
+}
+int8_t  Mbed4dGenie::genieReadObj (uint16_t object, uint16_t index)
+{
+    //wait for interface to be ready before sending stuff
+    if(WaitForIdle())
+        return ERROR_RESYNC;
+    unsigned int checksum ;
+    
+    _screen.putc(GENIE_READ_OBJ) ;     checksum  = GENIE_READ_OBJ ;
+    _screen.putc(object) ;             checksum ^= object ;   
+    _screen.putc(index) ;              checksum ^= index ; 
+    _screen.putc(checksum) ;
+        
+    //Here we dont wiat for a typical answer
+    //The screen will respond with an NACK if the command was not understood, otherwise it will send a report object frame    
+    return  0;//WaitForReadAnswer();
+}
+void Mbed4dGenie::writec(char data)
+{
+    _screen.putc(data);
+}
+bool Mbed4dGenie::WaitForIdle()
+{
+    /*
+        If the communication is still in progress
+        lets wait for it to finish or check/wait for timeout
+    */
+    if(state != CommIdle)
+    {
+        long timeout = _receptionTimer.read_ms() + TIMEOUT_PERIOD;
+        long timerReading = 0;
+        if(_receptionTimer.read_ms() >= RxMaxTimeout)
+        {
+            Reset();
+            RxStateTimeoutErrors++;
+        }
+        while(timerReading < timeout && state != CommIdle)
+        {
+            timerReading = _receptionTimer.read_ms();
+        }
+        LastResponse = 0;
+        return (timerReading >= timeout);
+    }
+    
+    return false;    
+}
+
+/*
+    Not used for now, since the screen will answer with either a report event or NAK
+    Since those two answers are so different, there is no efficient means to receive
+    both in interrupt. No wait to NAK will be done. DONT USE THIS FUNCTION ... YET
+*/
+int8_t Mbed4dGenie::WaitForReadAnswer()
+{
+    _waitTimer.reset();
+    long timeout = _waitTimer.read_ms() + TIMEOUT_PERIOD;
+    long timerReading = 0;
+    while(state == CommIdle && LastResponse != ERROR_NAK && timerReading < timeout)
+    {
+        timerReading = _waitTimer.read_ms();
+    }
+    if(LastResponse == ERROR_NAK)//check if the screen returned a NACK
+    {
+        LastResponse = NO_RESPONSE;
+        return ERROR_NAK;
+    }
+    else if(_waitTimer.read_ms() >= timeout) //check if we timed out while waiting for response
+    {   
+    
+        LastResponse = NO_RESPONSE;
+        return ERROR_TIMEOUT;
+    }
+    //if we get here it means we didnt timeout and the screen did accept the command
+    LastResponse = NO_RESPONSE;
+    return ERROR_NONE;
+}
+
+int8_t Mbed4dGenie::WaitForAnswer()
+{
+    _waitTimer.reset();
+    long timeout = _waitTimer.read_ms() + TIMEOUT_PERIOD;
+    long timerReading = 0;
+    while(LastResponse != GENIE_ACK && LastResponse != ERROR_NAK && timerReading < timeout)
+    {
+        timerReading = _waitTimer.read_ms();
+    }
+           
+    if(LastResponse == ERROR_NAK)
+    {
+        LastResponse = NO_RESPONSE;
+        return ERROR_NAK;
+    }
+    else if(_waitTimer.read_ms() >= timeout)
+    {   
+        #ifdef DEBUG
+        printf("Current timer:%d ; timeout:%d\n\r",_waitTimer.read_ms(),timeout);
+        #endif
+        LastResponse = NO_RESPONSE;
+        return ERROR_TIMEOUT;
+    }
+    LastResponse = NO_RESPONSE;
+    return ERROR_NONE;
+}
+
+void Mbed4dGenie::Reset(void)
+{
+    LastResponse = NO_RESPONSE;
+    state = CommIdle;
+    _receptionTimer.reset();
+    _waitTimer.reset();
+    while(_screen.readable())
+        _screen.getc();
+}
+
+////////////////////// _genieFlushEventQueue ////////////////////
+//
+// Reset all the event queue variables and start from scratch.
+//
+void Mbed4dGenie::_genieFlushEventQueue(void) {
+        _genieEventQueue.rd_index = 0;
+        _genieEventQueue.wr_index = 0;
+        _genieEventQueue.n_events = 0;
+}
+
+////////////////////// _genieEnqueueEvent ///////////////////
+//
+// Copy the bytes from a buffer supplied by the caller 
+// to the input queue 
+//
+// Parms:        uint8_t * data, a pointer to the user's data
+//
+// Returns:        TRUE if there was an empty location in the queue
+//                                to copy the data into
+//                        FALSE if not
+// Sets:        ERROR_REPLY_OVR if there was no room in the queue
+//
+bool Mbed4dGenie::_genieEnqueueEvent (uint8_t * data) {
+
+
+        if (_genieEventQueue.n_events < MAX_GENIE_EVENTS-2) {
+                memcpy (&_genieEventQueue.frames[_genieEventQueue.wr_index], data, 
+                                GENIE_FRAME_SIZE);
+                _genieEventQueue.wr_index++;
+                _genieEventQueue.wr_index &= MAX_GENIE_EVENTS -1;
+                _genieEventQueue.n_events++;
+                return TRUE;
+        } else {
+                return FALSE;
+        }
+}
+////////////////////// genieDequeueEvent ///////////////////
+//
+// Copy the bytes from a queued input event to a buffer supplied 
+// by the caller.
+//
+// Parms:        genieFrame * buff, a pointer to the user's buffer
+//
+// Returns:        TRUE if there was an event to copy
+//                        FALSE if not
+//
+bool Mbed4dGenie::genieDequeueEvent(genieFrame * buff) {
+
+
+        if (_genieEventQueue.n_events > 0) {
+                memcpy (buff, &_genieEventQueue.frames[_genieEventQueue.rd_index], 
+                                GENIE_FRAME_SIZE);
+                _genieEventQueue.rd_index++;
+                _genieEventQueue.rd_index &= MAX_GENIE_EVENTS -1;
+                _genieEventQueue.n_events--;
+                return TRUE;
+        } 
+        return FALSE;
+}
+void Mbed4dGenie::genieAttachEventHandler(genieUserEventHandlerPtr handler)
+{
+    _genieUserHandler = handler;
+}
+void Mbed4dGenie::genieDetachEventHandler(genieUserEventHandlerPtr handler) //Topher function. Fixes interrupt Vector issue hopefully
+{
+    _genieUserHandler = NULL;
+}
+bool Mbed4dGenie::PendingFrames(void)
+{
+    return (_genieEventQueue.n_events>0);
+}
