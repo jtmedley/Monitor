@@ -1,0 +1,8 @@
+
+1. Object of class ConfigVentForManual always creates struct termios options
+2. Stream must already be open for structure to be modified
+	Code works by importing default attributes from open stream to structure, then setting structure to desired attributes, then plugging structure back into stream - only modified attributes are visible
+3. Class details public functions that set values in structure
+4. Default class constructor == servo-i, uses settings from previous HelloWorldForMBED
+5. Pass a vent name to constructor to apply settings - probably requires input from user if not default
+
