@@ -7,7 +7,8 @@
 /* 
  * File:   PortableIncludes.h
  * Author: Medley
- * This header file includes all of the standard portable C++ libraries to be referenced by a single include
+ * This header file includes all of the standard portable C++ libraries to be referenced by a single include. 
+ * It is currently not in use.
  * 
  * TO DO: check if termios.h is actually portable - part of UNIX
  * 
