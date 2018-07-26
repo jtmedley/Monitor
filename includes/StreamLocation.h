@@ -5,16 +5,16 @@
  */
 
 /* 
- * File:   StreamLocation.h
+ * File:   StreamLocation1.h
  * Author: Medley
  *
- * Created on July 24, 2018, 12:31 PM
+ * Created on July 26, 2018, 2:02 PM
  */
 
-#ifndef STREAMLOCATION_H
-#define STREAMLOCATION_H
+#ifndef STREAMLOCATION1_H
+#define STREAMLOCATION1_H
 
 #define StreamLocation "../../../dev/ttyACM0"
 
-#endif /* STREAMLOCATION_H */
+#endif /* STREAMLOCATION1_H */
 
