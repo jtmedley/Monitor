@@ -4,8 +4,18 @@
  * and open the template in the editor.
  */
 
+/* 
+ * File:   Looper.h
+ * Author: Medley
+ * 
+ * File is irrelevant for now - merged into Test.cpp.
+ * 
+ * Created on July 25, 2018, 2:44 PM
+ */
+
+
 #include <Looper.h>
 
 
-ConfigForVentManual Looper() {
+ConfigForVentModel Looper() {
 }
