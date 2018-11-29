@@ -1,0 +1,28 @@
+# Vent settings for Servo-i
+# See "SerialPortConstants.h" for acceptable values
+# 
+# Serial Settings
+VentName = "Servo-i"
+BaudRate = 9600
+DataLength = CS8
+StopBits = 1
+# 
+# Command settings with no checksum
+EOTChar = 0x04
+ESCChar = 0x1B
+HelloCommand = "HO"
+HelloReceived = "900PCI"
+ReadTimeCommand = "RT"
+ChangeSamplingTimeCommand = "CS032"
+DefineCurveCommand = "DC0002"
+ReadCurveCommand = "RC10240"
+#
+# Command settings with checksum
+# Last two ASCII characters are checksum
+# Changes will require a new checksum value to be calculated
+ReadCIType = "RCTY1C"
+GetSettingsCommand = "RADAS45"
+GetBreathCommand = "RADAB54"
+GetSettingsChannelCommand = "SDADS30931032330033430530630833377"
+GetBreathChannelCommand = "SDADB20020120220420520620720823823924423225125725820959"
+ReadAlarmsCommand = "RADAA57"
